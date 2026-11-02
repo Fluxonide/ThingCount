@@ -16,6 +16,7 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Shader
 import android.net.Uri
+import android.os.Bundle
 import android.util.LruCache
 import android.util.TypedValue
 import android.view.View
