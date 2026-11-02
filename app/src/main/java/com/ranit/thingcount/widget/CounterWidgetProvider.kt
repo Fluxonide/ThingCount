@@ -35,7 +35,7 @@ class CounterWidgetProvider : AppWidgetProvider() {
                     val app = context.applicationContext as? ThingCountApp
                     app?.repository?.increment(counterId)
 
-                    // Refresh widget views
+                    // Refresh widget views across all instances
                     val appWidgetManager = AppWidgetManager.getInstance(context)
                     val thisWidget = ComponentName(context, CounterWidgetProvider::class.java)
                     val allWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget)
@@ -58,13 +58,13 @@ class CounterWidgetProvider : AppWidgetProvider() {
         ) {
             val views = RemoteViews(context.packageName, R.layout.widget_counter)
 
-            // Click widget title or background opens MainActivity
+            // Intent to open app
             val openAppIntent = Intent(context, MainActivity::class.java)
             val openAppPendingIntent = PendingIntent.getActivity(
                 context, 0, openAppIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            views.setOnClickPendingIntent(R.id.widget_root, openAppPendingIntent)
+            views.setOnClickPendingIntent(R.id.widget_title, openAppPendingIntent)
 
             CoroutineScope(Dispatchers.IO).launch {
                 val app = context.applicationContext as? ThingCountApp
@@ -85,10 +85,14 @@ class CounterWidgetProvider : AppWidgetProvider() {
                         incrementIntent,
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                     )
+
+                    // Allow tapping both the large count display and the + button to increment
+                    views.setOnClickPendingIntent(R.id.widget_count, incrementPendingIntent)
                     views.setOnClickPendingIntent(R.id.widget_btn_increment, incrementPendingIntent)
                 } else {
                     views.setTextViewText(R.id.widget_title, "ThingCount")
                     views.setTextViewText(R.id.widget_count, "0")
+                    views.setOnClickPendingIntent(R.id.widget_root, openAppPendingIntent)
                 }
 
                 appWidgetManager.updateAppWidget(appWidgetId, views)

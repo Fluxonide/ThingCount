@@ -4,6 +4,9 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val envVersionName = System.getenv("APP_VERSION_NAME")?.removePrefix("v")?.trim()?.ifBlank { "0.0.1" } ?: "0.0.1"
+val envVersionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 1
+
 android {
     namespace = "com.ranit.thingcount"
     compileSdk = 34
@@ -12,8 +15,8 @@ android {
         applicationId = "com.ranit.thingcount"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = envVersionCode
+        versionName = envVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -42,7 +45,6 @@ android {
 
     buildTypes {
         release {
-            // Enable R8 code minification & unused resource shrinking for a ultra-light APK
             isMinifyEnabled = true
             isShrinkResources = true
             val releaseSigning = signingConfigs.getByName("release")
