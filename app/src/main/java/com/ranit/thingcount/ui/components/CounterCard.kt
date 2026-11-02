@@ -44,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -99,39 +100,54 @@ fun CounterCard(
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
-                // Header: Emoji, Title, Tag and Lock
+                // Header: Name on top (with optional icon)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    CounterIconView(
-                        icon = counter.emoji,
-                        size = 32.dp,
-                        modifier = Modifier.padding(end = 10.dp)
-                    )
+                    if (counter.emoji.isNotBlank()) {
+                        CounterIconView(
+                            icon = counter.emoji,
+                            size = 36.dp,
+                            modifier = Modifier.padding(end = 12.dp)
+                        )
+                    }
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = counter.title,
-                            style = MaterialTheme.typography.titleMedium,
+                            fontSize = if (counter.emoji.isBlank()) 22.sp else 18.sp,
                             fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        if (counter.tag.isNotBlank()) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = accentColor.copy(alpha = 0.15f),
-                                modifier = Modifier.padding(top = 2.dp)
-                            ) {
-                                Text(
-                                    text = counter.tag,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = accentColor,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
+
+                        Row(
+                            modifier = Modifier.padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (counter.tag.isNotBlank()) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = accentColor.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = counter.tag,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = accentColor,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
+                            Text(
+                                text = "Step: ±${counter.step}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
 
@@ -140,7 +156,7 @@ fun CounterCard(
                             vibrate()
                             onToggleLock()
                         },
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(36.dp)
                     ) {
                         Icon(
                             imageVector = if (counter.isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
@@ -152,47 +168,11 @@ fun CounterCard(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Middle: Value display and Step info
+                // Down: + - icon in line of the number - 3 +
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    AnimatedContent(
-                        targetState = counter.currentValue,
-                        transitionSpec = {
-                            if (targetState > initialState) {
-                                slideInVertically { height -> height } togetherWith
-                                        slideOutVertically { height -> -height }
-                            } else {
-                                slideInVertically { height -> -height } togetherWith
-                                        slideOutVertically { height -> height }
-                            }
-                        },
-                        label = "CounterAnimation"
-                    ) { targetValue ->
-                        Text(
-                            text = targetValue.toString(),
-                            fontSize = 38.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    Text(
-                        text = "Step: ±${counter.step}",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Bottom: Increment / Decrement controls
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     FilledIconButton(
                         onClick = {
@@ -201,16 +181,47 @@ fun CounterCard(
                         },
                         enabled = !counter.isLocked,
                         colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            contentColor = MaterialTheme.colorScheme.onSurface
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                         ),
                         shape = CircleShape,
-                        modifier = Modifier.size(46.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
-                        Icon(Icons.Default.Remove, contentDescription = "Decrement")
+                        Icon(
+                            Icons.Default.Remove,
+                            contentDescription = "Decrement",
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AnimatedContent(
+                            targetState = counter.currentValue,
+                            transitionSpec = {
+                                if (targetState > initialState) {
+                                    slideInVertically { height -> height } togetherWith
+                                            slideOutVertically { height -> -height }
+                                } else {
+                                    slideInVertically { height -> -height } togetherWith
+                                            slideOutVertically { height -> height }
+                                }
+                            },
+                            label = "CounterAnimation"
+                        ) { targetValue ->
+                            Text(
+                                text = targetValue.toString(),
+                                fontSize = 42.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
 
                     FilledIconButton(
                         onClick = {
@@ -223,9 +234,13 @@ fun CounterCard(
                             contentColor = Color.White
                         ),
                         shape = CircleShape,
-                        modifier = Modifier.size(46.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Increment")
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "Increment",
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
                 }
             }

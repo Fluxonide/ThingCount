@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -36,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -80,9 +82,23 @@ fun CounterEditDialog(
     var selectedColor by remember { mutableLongStateOf(counter?.colorHex ?: CounterColors.first()) }
     var resetPeriod by remember { mutableStateOf(counter?.autoResetPeriod ?: ResetPeriod.NONE) }
 
-    var iconMode by remember { mutableIntStateOf(0) } // 0: Emoji, 1: Direct Link, 2: Upload
+    // 0: Emoji, 1: Direct Link, 2: Upload, 3: No icon
+    var iconMode by remember {
+        mutableIntStateOf(
+            when {
+                emoji.isBlank() -> 3
+                emoji.startsWith("http://", true) || emoji.startsWith("https://", true) -> 1
+                emoji.startsWith("/") ||
+                        emoji.startsWith("content://", true) ||
+                        emoji.startsWith("file://", true) -> 2
+                else -> 0
+            }
+        )
+    }
     var customUrlText by remember {
-        mutableStateOf(if (emoji.startsWith("http://") || emoji.startsWith("https://")) emoji else "")
+        mutableStateOf(
+            if (emoji.startsWith("http://", true) || emoji.startsWith("https://", true)) emoji else ""
+        )
     }
 
     var resetDropdownExpanded by remember { mutableStateOf(false) }
@@ -132,22 +148,48 @@ fun CounterEditDialog(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    CounterIconView(icon = emoji, size = 44.dp)
+                    if (emoji.isNotBlank()) {
+                        CounterIconView(icon = emoji, size = 44.dp)
+                    } else {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Block,
+                                    contentDescription = "No icon",
+                                    tint = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text("Counter Icon", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        Text("Choose an emoji, paste link, or upload an image", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            if (emoji.isBlank()) "No icon selected (name will cover full space in big font)"
+                            else "Choose an emoji, paste a link, upload an image, or skip the icon",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
 
                 // Icon Source Mode Chips
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     FilterChip(
                         selected = iconMode == 0,
-                        onClick = { iconMode = 0 },
+                        onClick = {
+                            iconMode = 0
+                            if (emoji.isBlank()) emoji = "🎯"
+                        },
                         label = { Text("Emoji") }
                     )
                     FilterChip(
@@ -162,6 +204,15 @@ fun CounterEditDialog(
                             imagePickerLauncher.launch("image/*")
                         },
                         label = { Text("Upload") }
+                    )
+                    FilterChip(
+                        selected = iconMode == 3,
+                        onClick = {
+                            iconMode = 3
+                            emoji = ""
+                            customUrlText = ""
+                        },
+                        label = { Text("No icon") }
                     )
                 }
 
@@ -202,7 +253,7 @@ fun CounterEditDialog(
                             value = customUrlText,
                             onValueChange = {
                                 customUrlText = it
-                                if (it.isNotBlank()) emoji = it.trim()
+                                emoji = it.trim()
                             },
                             label = { Text("Image Direct URL (https://...)") },
                             leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
@@ -220,6 +271,13 @@ fun CounterEditDialog(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Choose Image from Gallery")
                         }
+                    }
+                    3 -> {
+                        Text(
+                            text = "No icon will be shown. The counter name gets the full width.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
 
@@ -333,11 +391,11 @@ fun CounterEditDialog(
                     val startVal = startValueText.toLongOrNull() ?: 0L
                     val stepVal = stepText.toLongOrNull()?.coerceAtLeast(1L) ?: 1L
 
-                    val finalIcon = if (iconMode == 1 && customUrlText.isNotBlank()) customUrlText.trim() else emoji
+                    val finalIcon = if (iconMode == 3) "" else if (iconMode == 1) customUrlText.trim() else emoji.trim()
 
                     val updated = counter?.copy(
                         title = title.ifBlank { "Counter" },
-                        emoji = finalIcon.ifBlank { "🎯" },
+                        emoji = finalIcon,
                         tag = tag.ifBlank { "General" },
                         startValue = startVal,
                         step = stepVal,
@@ -345,7 +403,7 @@ fun CounterEditDialog(
                         autoResetPeriod = resetPeriod
                     ) ?: Counter(
                         title = title.ifBlank { "Counter" },
-                        emoji = finalIcon.ifBlank { "🎯" },
+                        emoji = finalIcon,
                         tag = tag.ifBlank { "General" },
                         currentValue = startVal,
                         startValue = startVal,

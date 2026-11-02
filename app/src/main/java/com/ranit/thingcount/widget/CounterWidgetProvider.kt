@@ -52,20 +52,23 @@ class CounterWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == ACTION_INCREMENT) {
-            val counterId = intent.getStringExtra(EXTRA_COUNTER_ID)
-            if (counterId != null) {
-                CoroutineScope(Dispatchers.IO).launch {
-                    val app = context.applicationContext as? ThingCountApp
-                    app?.repository?.increment(counterId)
-                    refreshAllWidgets(context)
-                }
+        val action = intent.action
+        if (action != ACTION_INCREMENT && action != ACTION_DECREMENT) return
+
+        val counterId = intent.getStringExtra(EXTRA_COUNTER_ID) ?: return
+        CoroutineScope(Dispatchers.IO).launch {
+            val app = context.applicationContext as? ThingCountApp
+            when (action) {
+                ACTION_INCREMENT -> app?.repository?.increment(counterId)
+                ACTION_DECREMENT -> app?.repository?.decrement(counterId)
             }
+            refreshAllWidgets(context)
         }
     }
 
     companion object {
         const val ACTION_INCREMENT = "com.ranit.thingcount.ACTION_WIDGET_INCREMENT"
+        const val ACTION_DECREMENT = "com.ranit.thingcount.ACTION_WIDGET_DECREMENT"
         const val EXTRA_COUNTER_ID = "com.ranit.thingcount.EXTRA_COUNTER_ID"
 
         private const val MAX_ICON_BYTES = 5 * 1024 * 1024
@@ -73,6 +76,8 @@ class CounterWidgetProvider : AppWidgetProvider() {
         private const val ICON_CONTAINER_DP = 40
         private const val BUTTON_BITMAP_SIZE = 128
         private const val ICON_DISK_CACHE_MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000
+        private const val TITLE_SIZE_WITH_ICON = 16f
+        private const val TITLE_SIZE_WITHOUT_ICON = 22f
 
         private val iconCache = object : LruCache<String, Bitmap>(ICON_CACHE_SIZE) {}
         private val buttonCache = object : LruCache<Int, Bitmap>(16) {}
@@ -142,7 +147,7 @@ class CounterWidgetProvider : AppWidgetProvider() {
                     options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH),
                     options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT)
                 ).takeIf { it > 0 } ?: 110
-                (shortestSide * 0.15f).roundToInt().coerceIn(16, 40)
+                (shortestSide * 0.10f).roundToInt().coerceIn(8, 28)
             } else {
                 10
             }
@@ -175,7 +180,7 @@ class CounterWidgetProvider : AppWidgetProvider() {
 
             views.setViewVisibility(
                 R.id.widget_title,
-                if (WidgetPreferences.getShowTitle(context)) View.VISIBLE else View.INVISIBLE
+                if (WidgetPreferences.getShowTitle(context)) View.VISIBLE else View.GONE
             )
         }
 
@@ -188,18 +193,35 @@ class CounterWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_title, counter.title)
             views.setTextViewText(R.id.widget_count, counter.currentValue.toString())
 
+            val hasIcon = bindIcon(context, views, counter.emoji)
+            views.setTextViewTextSize(
+                R.id.widget_title,
+                TypedValue.COMPLEX_UNIT_SP,
+                if (hasIcon) TITLE_SIZE_WITH_ICON else TITLE_SIZE_WITHOUT_ICON
+            )
+
             val accent = counter.colorHex.toInt() or 0xFF000000.toInt()
+            val buttonColor = contentColorFor(accent)
             views.setImageViewBitmap(R.id.widget_btn_increment_bg, circleButtonBitmap(accent))
-            views.setTextColor(R.id.widget_btn_plus, contentColorFor(accent))
+            views.setImageViewBitmap(R.id.widget_btn_decrement_bg, circleButtonBitmap(accent))
+            views.setTextColor(R.id.widget_btn_plus, buttonColor)
+            views.setTextColor(R.id.widget_btn_minus, buttonColor)
+
             views.setContentDescription(
                 R.id.widget_btn_increment,
                 "Increase ${counter.title} by ${counter.step}"
             )
-
-            bindIcon(context, views, counter.emoji)
+            views.setContentDescription(
+                R.id.widget_btn_decrement,
+                "Decrease ${counter.title} by ${counter.step}"
+            )
 
             val incrementIntent = Intent(context, CounterWidgetProvider::class.java).apply {
                 action = ACTION_INCREMENT
+                putExtra(EXTRA_COUNTER_ID, counter.id)
+            }
+            val decrementIntent = Intent(context, CounterWidgetProvider::class.java).apply {
+                action = ACTION_DECREMENT
                 putExtra(EXTRA_COUNTER_ID, counter.id)
             }
             val incrementPendingIntent = PendingIntent.getBroadcast(
@@ -208,20 +230,36 @@ class CounterWidgetProvider : AppWidgetProvider() {
                 incrementIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
+            val decrementPendingIntent = PendingIntent.getBroadcast(
+                context,
+                appWidgetId * 2 + 1,
+                decrementIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
 
             views.setOnClickPendingIntent(R.id.widget_btn_increment, incrementPendingIntent)
+            views.setOnClickPendingIntent(R.id.widget_btn_decrement, decrementPendingIntent)
             views.setOnClickPendingIntent(R.id.widget_count, incrementPendingIntent)
         }
 
         private fun bindEmptyState(context: Context, views: RemoteViews) {
             views.setTextViewText(R.id.widget_title, "ThingCount")
-            views.setTextViewText(R.id.widget_count, "0")
-            views.setImageViewBitmap(
-                R.id.widget_btn_increment_bg,
-                circleButtonBitmap(0xFF3871E0.toInt())
+            views.setTextViewTextSize(
+                R.id.widget_title,
+                TypedValue.COMPLEX_UNIT_SP,
+                TITLE_SIZE_WITH_ICON
             )
+            views.setTextViewText(R.id.widget_count, "0")
+
+            val blue = 0xFF3871E0.toInt()
+            views.setImageViewBitmap(R.id.widget_btn_increment_bg, circleButtonBitmap(blue))
+            views.setImageViewBitmap(R.id.widget_btn_decrement_bg, circleButtonBitmap(blue))
             views.setTextColor(R.id.widget_btn_plus, Color.WHITE)
+            views.setTextColor(R.id.widget_btn_minus, Color.WHITE)
             views.setContentDescription(R.id.widget_btn_increment, "Open ThingCount")
+            views.setContentDescription(R.id.widget_btn_decrement, "Open ThingCount")
+
+            views.setViewVisibility(R.id.widget_icon_frame, View.VISIBLE)
             views.setViewVisibility(R.id.widget_icon, View.GONE)
             views.setViewVisibility(R.id.widget_icon_emoji, View.VISIBLE)
             views.setTextViewText(R.id.widget_icon_emoji, "🎯")
@@ -232,11 +270,20 @@ class CounterWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.widget_btn_increment, openAppPendingIntent)
+            views.setOnClickPendingIntent(R.id.widget_btn_decrement, openAppPendingIntent)
             views.setOnClickPendingIntent(R.id.widget_count, openAppPendingIntent)
         }
 
-        private fun bindIcon(context: Context, views: RemoteViews, icon: String) {
+        private fun bindIcon(context: Context, views: RemoteViews, icon: String): Boolean {
             val iconValue = icon.trim()
+            if (iconValue.isBlank()) {
+                views.setViewVisibility(R.id.widget_icon_frame, View.GONE)
+                views.setViewVisibility(R.id.widget_icon, View.GONE)
+                views.setViewVisibility(R.id.widget_icon_emoji, View.GONE)
+                return false
+            }
+
+            views.setViewVisibility(R.id.widget_icon_frame, View.VISIBLE)
             val bitmap = loadIconBitmap(
                 context,
                 iconValue,
@@ -249,11 +296,12 @@ class CounterWidgetProvider : AppWidgetProvider() {
                 views.setViewVisibility(R.id.widget_icon_emoji, View.GONE)
             } else {
                 // Never show a raw URL/path in the widget: fall back to an emoji.
-                val fallback = if (isImageReference(iconValue)) "🎯" else iconValue.ifBlank { "🎯" }
+                val fallback = if (isImageReference(iconValue)) "🎯" else iconValue
                 views.setTextViewText(R.id.widget_icon_emoji, fallback)
                 views.setViewVisibility(R.id.widget_icon, View.GONE)
                 views.setViewVisibility(R.id.widget_icon_emoji, View.VISIBLE)
             }
+            return true
         }
 
         private fun isImageReference(value: String): Boolean =

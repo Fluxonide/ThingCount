@@ -32,23 +32,25 @@ fun CounterIconView(
         modifier = modifier.size(size),
         contentAlignment = Alignment.Center
     ) {
-        if (isImageUri) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(icon)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(size)
-                    .clip(CircleShape)
-            )
-        } else {
-            Text(
-                text = icon.ifBlank { "🎯" },
-                fontSize = (size.value * 0.85).sp
-            )
+        if (icon.isNotBlank()) {
+            if (isImageUri) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(icon)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(size)
+                        .clip(CircleShape)
+                )
+            } else {
+                Text(
+                    text = icon,
+                    fontSize = (size.value * 0.85).sp
+                )
+            }
         }
     }
 }
