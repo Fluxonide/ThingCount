@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">ThingCount</string>
+    <string name="widget_name">Quick Counter</string>
+</resources>
