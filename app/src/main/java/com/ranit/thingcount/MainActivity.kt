@@ -20,6 +20,7 @@ import com.ranit.thingcount.ui.screens.SettingsSyncScreen
 import com.ranit.thingcount.ui.theme.ThingCountTheme
 import com.ranit.thingcount.ui.viewmodel.CounterViewModel
 import com.ranit.thingcount.ui.viewmodel.CounterViewModelFactory
+import com.ranit.thingcount.widget.CounterWidgetProvider
 
 class MainActivity : ComponentActivity() {
 
@@ -78,5 +79,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Pick up any changes made while the app was in the background
+        CounterWidgetProvider.refreshAllWidgets(this)
     }
 }
