@@ -57,6 +57,16 @@ class CounterWidgetProvider : AppWidgetProvider() {
         }
     }
 
+    override fun onAppWidgetOptionsChanged(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetId: Int,
+        newOptions: Bundle
+    ) {
+        super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions)
+        updateAppWidget(context, appWidgetManager, appWidgetId)
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         val action = intent.action
@@ -83,12 +93,37 @@ class CounterWidgetProvider : AppWidgetProvider() {
         private const val ICON_CONTAINER_DP = 40
         private const val BUTTON_BITMAP_SIZE = 128
         private const val ICON_DISK_CACHE_MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000
-        private const val TITLE_SIZE_WITH_ICON = 16f
-        private const val TITLE_SIZE_WITHOUT_ICON = 22f
 
         private val iconCache = object : LruCache<String, Bitmap>(ICON_CACHE_SIZE) {}
         private val buttonCache = object : LruCache<Int, Bitmap>(16) {}
         private val updateMutex = Mutex()
+
+        /**
+         * Dynamically computes title text size based on the widget's current dimensions.
+         * As the user resizes the widget (larger width or height), the title scales up
+         * to fill the available space nicely.
+         */
+        private fun computeDynamicTitleSize(
+            widthDp: Int,
+            heightDp: Int,
+            hasIcon: Boolean
+        ): Float {
+            val clampedWidth = widthDp.coerceIn(100, 480)
+            val clampedHeight = heightDp.coerceIn(100, 480)
+
+            // Factor ranges from 0.0 (compact 2x2 ~110dp) to 1.0 (large 4x4 or full width ~350dp+)
+            val widthGrowth = ((clampedWidth - 110) / 240f).coerceIn(0f, 1f)
+            val heightGrowth = ((clampedHeight - 110) / 240f).coerceIn(0f, 1f)
+            val growthFactor = (widthGrowth * 0.75f + heightGrowth * 0.25f)
+
+            return if (hasIcon) {
+                // Scales smoothly from 16sp on 2x2 up to 30sp on large widgets
+                16f + (growthFactor * 14f)
+            } else {
+                // Scales smoothly from 22sp on 2x2 up to 38sp on large widgets
+                22f + (growthFactor * 16f)
+            }
+        }
 
         fun refreshAllWidgets(context: Context) {
             val appWidgetManager = AppWidgetManager.getInstance(context)
@@ -104,6 +139,10 @@ class CounterWidgetProvider : AppWidgetProvider() {
             appWidgetId: Int
         ) {
             val views = RemoteViews(context.packageName, R.layout.widget_counter)
+            val options = appWidgetManager.getAppWidgetOptions(appWidgetId)
+            val widthDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH).takeIf { it > 0 } ?: 120
+            val heightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT).takeIf { it > 0 } ?: 120
+
             applyAppearance(context, views, appWidgetManager, appWidgetId)
 
             val openAppIntent = Intent(context, MainActivity::class.java).apply {
@@ -135,9 +174,9 @@ class CounterWidgetProvider : AppWidgetProvider() {
                     }
 
                     if (counter != null) {
-                        bindCounter(context, views, counter, appWidgetId)
+                        bindCounter(context, views, counter, appWidgetId, widthDp, heightDp)
                     } else {
-                        bindEmptyState(context, views, appWidgetId)
+                        bindEmptyState(context, views, appWidgetId, widthDp, heightDp)
                     }
 
                     appWidgetManager.updateAppWidget(appWidgetId, views)
@@ -208,17 +247,22 @@ class CounterWidgetProvider : AppWidgetProvider() {
             context: Context,
             views: RemoteViews,
             counter: Counter,
-            appWidgetId: Int
+            appWidgetId: Int,
+            widthDp: Int,
+            heightDp: Int
         ) {
             views.setTextViewText(R.id.widget_title, counter.title)
             views.setTextViewText(R.id.widget_count, counter.currentValue.toString())
 
             val hasIcon = bindIcon(context, views, counter.emoji)
+            val titleSize = computeDynamicTitleSize(widthDp, heightDp, hasIcon)
+
             views.setTextViewTextSize(
                 R.id.widget_title,
                 TypedValue.COMPLEX_UNIT_SP,
-                if (hasIcon) TITLE_SIZE_WITH_ICON else TITLE_SIZE_WITHOUT_ICON
+                titleSize
             )
+            views.setInt(R.id.widget_title, "setMaxLines", if (heightDp >= 180) 3 else 2)
 
             val accent = counter.colorHex.toInt() or 0xFF000000.toInt()
             val buttonColor = contentColorFor(accent)
@@ -262,12 +306,19 @@ class CounterWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.widget_count, incrementPendingIntent)
         }
 
-        private fun bindEmptyState(context: Context, views: RemoteViews, appWidgetId: Int) {
+        private fun bindEmptyState(
+            context: Context,
+            views: RemoteViews,
+            appWidgetId: Int,
+            widthDp: Int,
+            heightDp: Int
+        ) {
+            val titleSize = computeDynamicTitleSize(widthDp, heightDp, true)
             views.setTextViewText(R.id.widget_title, "Tap to Select")
             views.setTextViewTextSize(
                 R.id.widget_title,
                 TypedValue.COMPLEX_UNIT_SP,
-                TITLE_SIZE_WITH_ICON
+                titleSize
             )
             views.setTextViewText(R.id.widget_count, "+")
 

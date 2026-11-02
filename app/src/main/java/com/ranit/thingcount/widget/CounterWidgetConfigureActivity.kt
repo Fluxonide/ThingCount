@@ -72,8 +72,7 @@ class CounterWidgetConfigureActivity : ComponentActivity() {
         setContent {
             ThingCountTheme {
                 val app = application as ThingCountApp
-                val counters by app.repository.allCounters.collectAsState(initial = emptyList())
-                val activeCounters = remember(counters) { counters.filter { !it.isDeleted } }
+                val activeCounters by app.repository.activeCounters.collectAsState(initial = emptyList())
                 val currentCounterId = remember(appWidgetId) {
                     if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                         WidgetPreferences.getCounterIdForWidget(this, appWidgetId)
