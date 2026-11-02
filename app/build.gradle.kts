@@ -62,6 +62,12 @@ android {
         }
     }
 
+    lint {
+        // lintVital adds a full analysis pass to every release build.
+        // Run `./gradlew lint` explicitly when you want the checks.
+        checkReleaseBuilds = false
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

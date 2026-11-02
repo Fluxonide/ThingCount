@@ -1,9 +1,13 @@
-name: Release APK on Tag
+name: Build Release APK
 
 on:
   push:
     tags:
       - 'v*'
+    # Building on main keeps the default-branch Gradle cache warm.
+    # Tag builds can restore that cache; caches are scoped per tag otherwise.
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       tag_name:
@@ -13,6 +17,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   release:
@@ -30,7 +38,7 @@ jobs:
           java-version: '17'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Prepare Signing Keystore from Secrets
         env:
@@ -41,9 +49,6 @@ jobs:
           else
             echo "No KEYSTORE_BASE64 secret provided; proceeding with unsigned/default build."
           fi
-
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
 
       - name: Calculate Version Info
         id: version_info
@@ -68,10 +73,11 @@ jobs:
           APP_VERSION_NAME: ${{ steps.version_info.outputs.version_name }}
           APP_VERSION_CODE: ${{ steps.version_info.outputs.version_code }}
         run: |
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew :app:assembleRelease --build-cache --stacktrace
 
       - name: Prepare Release Artifact
         id: prepare_release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         run: |
           TAG="${{ steps.version_info.outputs.tag }}"
           APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
@@ -81,6 +87,7 @@ jobs:
           echo "apk_path=$RELEASE_NAME" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release and Upload APK
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.prepare_release.outputs.tag }}
