@@ -4,10 +4,6 @@ on:
   push:
     tags:
       - 'v*'
-    # Building on main keeps the default-branch Gradle cache warm.
-    # Tag builds can restore that cache; caches are scoped per tag otherwise.
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       tag_name:
