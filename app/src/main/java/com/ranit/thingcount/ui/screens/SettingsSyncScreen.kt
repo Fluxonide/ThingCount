@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -25,7 +26,7 @@ import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -33,6 +34,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,6 +48,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -65,6 +68,10 @@ import com.ranit.thingcount.ThingCountApp
 import com.ranit.thingcount.data.drive.SyncResult
 import com.ranit.thingcount.data.update.AppUpdateManager
 import com.ranit.thingcount.ui.viewmodel.CounterViewModel
+import com.ranit.thingcount.widget.CounterWidgetProvider
+import com.ranit.thingcount.widget.IconShape
+import com.ranit.thingcount.widget.WidgetPreferences
+import com.ranit.thingcount.widget.WidgetShape
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -92,6 +99,11 @@ fun SettingsSyncScreen(
 
     var repoOwner by remember { mutableStateOf(BuildConfig.GITHUB_REPO_OWNER) }
     var repoName by remember { mutableStateOf(BuildConfig.GITHUB_REPO_NAME) }
+
+    var widgetShape by remember { mutableStateOf(WidgetPreferences.getShape(context)) }
+    var widgetIconSize by remember { mutableIntStateOf(WidgetPreferences.getIconSize(context)) }
+    var widgetIconShape by remember { mutableStateOf(WidgetPreferences.getIconShape(context)) }
+    var widgetShowTitle by remember { mutableStateOf(WidgetPreferences.getShowTitle(context)) }
 
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -138,6 +150,162 @@ fun SettingsSyncScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Widget Appearance Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.GridView,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Widget Appearance",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Choose the shape of the home-screen widget and how large the counter icon should be.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "Shape",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        WidgetShape.values().forEach { shape ->
+                            FilterChip(
+                                selected = widgetShape == shape,
+                                onClick = {
+                                    widgetShape = shape
+                                    WidgetPreferences.setShape(context, shape)
+                                    CounterWidgetProvider.refreshAllWidgets(context)
+                                },
+                                label = { Text(shape.label) }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "Icon size",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        WidgetPreferences.iconSizes.forEach { sizeDp ->
+                            FilterChip(
+                                selected = widgetIconSize == sizeDp,
+                                onClick = {
+                                    widgetIconSize = sizeDp
+                                    WidgetPreferences.setIconSize(context, sizeDp)
+                                    CounterWidgetProvider.refreshAllWidgets(context)
+                                },
+                                label = { Text("${sizeDp}dp") }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "Icon shape",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        IconShape.values().forEach { shape ->
+                            FilterChip(
+                                selected = widgetIconShape == shape,
+                                onClick = {
+                                    widgetIconShape = shape
+                                    WidgetPreferences.setIconShape(context, shape)
+                                    CounterWidgetProvider.refreshAllWidgets(context)
+                                },
+                                label = { Text(shape.label) }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "Counter name",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = widgetShowTitle,
+                            onClick = {
+                                widgetShowTitle = true
+                                WidgetPreferences.setShowTitle(context, true)
+                                CounterWidgetProvider.refreshAllWidgets(context)
+                            },
+                            label = { Text("Show") }
+                        )
+                        FilterChip(
+                            selected = !widgetShowTitle,
+                            onClick = {
+                                widgetShowTitle = false
+                                WidgetPreferences.setShowTitle(context, false)
+                                CounterWidgetProvider.refreshAllWidgets(context)
+                            },
+                            label = { Text("Hide") }
+                        )
+                    }
+                }
+            }
+
             // Google Drive Sync Card
             Card(
                 modifier = Modifier.fillMaxWidth(),

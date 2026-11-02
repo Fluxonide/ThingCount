@@ -8,16 +8,16 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
-import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Shader
 import android.net.Uri
 import android.util.LruCache
+import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import androidx.core.graphics.ColorUtils
@@ -36,7 +36,7 @@ import java.io.FileInputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import kotlin.math.max
+import kotlin.math.roundToInt
 
 class CounterWidgetProvider : AppWidgetProvider() {
 
@@ -70,11 +70,12 @@ class CounterWidgetProvider : AppWidgetProvider() {
 
         private const val MAX_ICON_BYTES = 5 * 1024 * 1024
         private const val ICON_CACHE_SIZE = 24
-        private const val PILL_WIDTH = 512
-        private const val PILL_HEIGHT = 96
+        private const val ICON_CONTAINER_DP = 40
+        private const val BUTTON_BITMAP_SIZE = 128
+        private const val ICON_DISK_CACHE_MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000
 
         private val iconCache = object : LruCache<String, Bitmap>(ICON_CACHE_SIZE) {}
-        private val pillCache = object : LruCache<Int, Bitmap>(16) {}
+        private val buttonCache = object : LruCache<Int, Bitmap>(16) {}
         private val updateMutex = Mutex()
 
         fun refreshAllWidgets(context: Context) {
@@ -91,6 +92,7 @@ class CounterWidgetProvider : AppWidgetProvider() {
             appWidgetId: Int
         ) {
             val views = RemoteViews(context.packageName, R.layout.widget_counter)
+            applyAppearance(context, views, appWidgetManager, appWidgetId)
 
             val openAppIntent = Intent(context, MainActivity::class.java)
             val openAppPendingIntent = PendingIntent.getActivity(
@@ -118,6 +120,65 @@ class CounterWidgetProvider : AppWidgetProvider() {
             }
         }
 
+        /**
+         * Applies the user-selected shape and icon size. The widget layout itself stays
+         * the same so RemoteViews keeps working on all supported Android versions.
+         */
+        private fun applyAppearance(
+            context: Context,
+            views: RemoteViews,
+            appWidgetManager: AppWidgetManager,
+            appWidgetId: Int
+        ) {
+            val shape = WidgetPreferences.getShape(context)
+            val iconSizeDp = WidgetPreferences.getIconSize(context)
+
+            views.setInt(R.id.widget_root, "setBackgroundResource", shape.backgroundRes)
+
+            val rootPaddingDp = if (shape == WidgetShape.CIRCLE) {
+                // Keep content inside the circle, based on the actual widget size.
+                val options = appWidgetManager.getAppWidgetOptions(appWidgetId)
+                val shortestSide = minOf(
+                    options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH),
+                    options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT)
+                ).takeIf { it > 0 } ?: 110
+                (shortestSide * 0.15f).roundToInt().coerceIn(16, 40)
+            } else {
+                10
+            }
+            val rootPadding = dp(context, rootPaddingDp)
+            views.setViewPadding(
+                R.id.widget_root,
+                rootPadding,
+                rootPadding,
+                rootPadding,
+                rootPadding
+            )
+
+            val iconPadding = dp(
+                context,
+                ((ICON_CONTAINER_DP - iconSizeDp) / 2f).coerceAtLeast(0f)
+            )
+            views.setViewPadding(R.id.widget_icon, iconPadding, iconPadding, iconPadding, iconPadding)
+            views.setViewPadding(
+                R.id.widget_icon_emoji,
+                iconPadding,
+                iconPadding,
+                iconPadding,
+                iconPadding
+            )
+            views.setTextViewTextSize(
+                R.id.widget_icon_emoji,
+                TypedValue.COMPLEX_UNIT_SP,
+                iconSizeDp * 0.8f
+            )
+
+            views.setViewVisibility(
+                R.id.widget_title,
+                if (WidgetPreferences.getShowTitle(context)) View.VISIBLE else View.INVISIBLE
+            )
+        }
+
         private fun bindCounter(
             context: Context,
             views: RemoteViews,
@@ -126,11 +187,10 @@ class CounterWidgetProvider : AppWidgetProvider() {
         ) {
             views.setTextViewText(R.id.widget_title, counter.title)
             views.setTextViewText(R.id.widget_count, counter.currentValue.toString())
-            views.setTextViewText(R.id.widget_step, "Step ±${counter.step}")
-            views.setTextViewText(R.id.widget_btn_increment_label, "+ ${counter.step}")
 
             val accent = counter.colorHex.toInt() or 0xFF000000.toInt()
-            views.setImageViewBitmap(R.id.widget_btn_increment_bg, pillBitmap(accent))
+            views.setImageViewBitmap(R.id.widget_btn_increment_bg, circleButtonBitmap(accent))
+            views.setTextColor(R.id.widget_btn_plus, contentColorFor(accent))
             views.setContentDescription(
                 R.id.widget_btn_increment,
                 "Increase ${counter.title} by ${counter.step}"
@@ -156,12 +216,12 @@ class CounterWidgetProvider : AppWidgetProvider() {
         private fun bindEmptyState(context: Context, views: RemoteViews) {
             views.setTextViewText(R.id.widget_title, "ThingCount")
             views.setTextViewText(R.id.widget_count, "0")
-            views.setTextViewText(R.id.widget_step, "Tap to add a counter")
-            views.setTextViewText(R.id.widget_btn_increment_label, "Open app")
             views.setImageViewBitmap(
                 R.id.widget_btn_increment_bg,
-                pillBitmap(0xFF3871E0.toInt())
+                circleButtonBitmap(0xFF3871E0.toInt())
             )
+            views.setTextColor(R.id.widget_btn_plus, Color.WHITE)
+            views.setContentDescription(R.id.widget_btn_increment, "Open ThingCount")
             views.setViewVisibility(R.id.widget_icon, View.GONE)
             views.setViewVisibility(R.id.widget_icon_emoji, View.VISIBLE)
             views.setTextViewText(R.id.widget_icon_emoji, "🎯")
@@ -177,7 +237,11 @@ class CounterWidgetProvider : AppWidgetProvider() {
 
         private fun bindIcon(context: Context, views: RemoteViews, icon: String) {
             val iconValue = icon.trim()
-            val bitmap = loadIconBitmap(context, iconValue)
+            val bitmap = loadIconBitmap(
+                context,
+                iconValue,
+                WidgetPreferences.getIconShape(context)
+            )
 
             if (bitmap != null) {
                 views.setImageViewBitmap(R.id.widget_icon, bitmap)
@@ -199,15 +263,21 @@ class CounterWidgetProvider : AppWidgetProvider() {
                     value.startsWith("file://", ignoreCase = true) ||
                     value.startsWith("/")
 
-        private fun loadIconBitmap(context: Context, icon: String): Bitmap? {
+        private fun loadIconBitmap(
+            context: Context,
+            icon: String,
+            iconShape: IconShape
+        ): Bitmap? {
             if (icon.isBlank() || !isImageReference(icon)) return null
 
-            iconCache.get(icon)?.let { return it }
+            val cacheKey = "$icon@${iconShape.key}"
+            iconCache.get(cacheKey)?.let { return it }
 
             val bytes = try {
                 when {
                     icon.startsWith("http://", ignoreCase = true) ||
-                            icon.startsWith("https://", ignoreCase = true) -> downloadBytes(icon)
+                            icon.startsWith("https://", ignoreCase = true) ->
+                        readUrlIcon(context, icon)
 
                     else -> {
                         val uri = Uri.parse(icon)
@@ -230,12 +300,50 @@ class CounterWidgetProvider : AppWidgetProvider() {
             } ?: return null
 
             val density = context.resources.displayMetrics.density
-            val sizePx = (28 * density).toInt().coerceAtLeast(48)
+            val sizePx = (ICON_CONTAINER_DP * density).toInt().coerceAtLeast(48)
             val decoded = decodeSampled(bytes, sizePx * 2) ?: return null
-            val circular = circleCrop(decoded, sizePx)
-            if (circular !== decoded) decoded.recycle()
-            iconCache.put(icon, circular)
-            return circular
+            val badge = iconBadge(decoded, sizePx, iconShape)
+            if (badge !== decoded) decoded.recycle()
+            iconCache.put(cacheKey, badge)
+            return badge
+        }
+
+        /**
+         * URL icons are cached on disk so the widget still shows the blade pack
+         * image after a reboot or when the phone is offline.
+         */
+        private fun readUrlIcon(context: Context, url: String): ByteArray? {
+            val file = iconDiskFile(context, url)
+            val cached = readCachedBytes(file)
+            val isFresh = file.exists() &&
+                    System.currentTimeMillis() - file.lastModified() < ICON_DISK_CACHE_MAX_AGE_MS
+
+            if (cached != null && isFresh) return cached
+
+            val downloaded = downloadBytes(url)
+            if (downloaded != null) {
+                try {
+                    file.parentFile?.mkdirs()
+                    file.writeBytes(downloaded)
+                } catch (_: Exception) {
+                    // Disk cache is best-effort.
+                }
+                return downloaded
+            }
+
+            // Offline or bad response: fall back to whatever was cached before.
+            return cached
+        }
+
+        private fun iconDiskFile(context: Context, url: String): File {
+            val fileName = "${Integer.toHexString(url.hashCode())}_${url.length}.img"
+            return File(File(context.filesDir, "widget_icons"), fileName)
+        }
+
+        private fun readCachedBytes(file: File): ByteArray? = try {
+            if (file.exists()) FileInputStream(file).use { readLimited(it) } else null
+        } catch (_: Exception) {
+            null
         }
 
         private fun downloadBytes(url: String): ByteArray? {
@@ -285,49 +393,83 @@ class CounterWidgetProvider : AppWidgetProvider() {
             return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
         }
 
-        private fun circleCrop(source: Bitmap, sizePx: Int): Bitmap {
+        private fun iconBadge(source: Bitmap, sizePx: Int, shape: IconShape): Bitmap {
             val output = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(output)
-            val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-            val shader = BitmapShader(source, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+            val size = sizePx.toFloat()
+            val rect = RectF(0f, 0f, size, size)
+            val path = Path().apply {
+                when (shape) {
+                    IconShape.CIRCLE ->
+                        addCircle(size / 2f, size / 2f, size / 2f, Path.Direction.CW)
 
-            val scale = max(
-                sizePx.toFloat() / source.width,
-                sizePx.toFloat() / source.height
-            )
-            val matrix = Matrix().apply {
-                setScale(scale, scale)
-                postTranslate(
-                    (sizePx - source.width * scale) / 2f,
-                    (sizePx - source.height * scale) / 2f
-                )
+                    IconShape.ROUNDED ->
+                        addRoundRect(rect, size * 0.22f, size * 0.22f, Path.Direction.CW)
+
+                    IconShape.SQUARE ->
+                        addRoundRect(rect, size * 0.03f, size * 0.03f, Path.Direction.CW)
+                }
             }
-            shader.setLocalMatrix(matrix)
-            paint.shader = shader
-            canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, paint)
+
+            canvas.save()
+            canvas.clipPath(path)
+
+            // A white tile suits blade pack / product images that usually have
+            // a white background, and keeps transparent PNGs readable.
+            canvas.drawPath(
+                path,
+                Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+            )
+
+            // Fit the whole image inside the tile instead of cropping its edges.
+            val available = size * 0.88f
+            val scale = kotlin.math.min(
+                available / source.width,
+                available / source.height
+            )
+            val left = (size - source.width * scale) / 2f
+            val top = (size - source.height * scale) / 2f
+            val destination = RectF(
+                left,
+                top,
+                left + source.width * scale,
+                top + source.height * scale
+            )
+            canvas.drawBitmap(
+                source,
+                null,
+                destination,
+                Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            )
+            canvas.restore()
             return output
         }
 
-        private fun pillBitmap(color: Int): Bitmap {
-            pillCache.get(color)?.let { return it }
+        private fun circleButtonBitmap(color: Int): Bitmap {
+            buttonCache.get(color)?.let { return it }
 
-            val bitmap = Bitmap.createBitmap(PILL_WIDTH, PILL_HEIGHT, Bitmap.Config.ARGB_8888)
+            val size = BUTTON_BITMAP_SIZE
+            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
             val paint = Paint(Paint.ANTI_ALIAS_FLAG)
             paint.shader = LinearGradient(
-                0f, 0f, 0f, PILL_HEIGHT.toFloat(),
+                0f, 0f, 0f, size.toFloat(),
                 ColorUtils.blendARGB(color, Color.WHITE, 0.16f),
                 color,
                 Shader.TileMode.CLAMP
             )
-            canvas.drawRoundRect(
-                RectF(0f, 0f, PILL_WIDTH.toFloat(), PILL_HEIGHT.toFloat()),
-                PILL_HEIGHT / 2f,
-                PILL_HEIGHT / 2f,
-                paint
-            )
-            pillCache.put(color, bitmap)
+            canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
+            buttonCache.put(color, bitmap)
             return bitmap
         }
+
+        private fun contentColorFor(background: Int): Int =
+            if (ColorUtils.calculateLuminance(background) > 0.55) Color.BLACK else Color.WHITE
+
+        private fun dp(context: Context, value: Int): Int =
+            (value * context.resources.displayMetrics.density).roundToInt()
+
+        private fun dp(context: Context, value: Float): Int =
+            (value * context.resources.displayMetrics.density).roundToInt()
     }
 }

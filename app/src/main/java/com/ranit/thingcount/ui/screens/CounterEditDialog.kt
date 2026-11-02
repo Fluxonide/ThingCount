@@ -61,7 +61,7 @@ import com.ranit.thingcount.ui.theme.CounterColors
 import java.io.File
 import java.io.FileOutputStream
 
-private val PRESET_EMOJIS = listOf("🎯", "💧", "📖", "🏋️", "☕", "💰", "💊", "🚶", "⭐️", "🔥", "🧘", "🍏")
+private val PRESET_EMOJIS = listOf("🪒", "🎯", "💧", "📖", "🏋️", "☕", "💰", "💊", "🚶", "⭐️", "🔥", "🧘", "🍏")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
