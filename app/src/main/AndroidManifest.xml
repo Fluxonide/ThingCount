@@ -38,13 +38,24 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- App Widget Provider for Home Screen Quick Increment -->
+        <!-- App Widget Configuration Activity -->
+        <activity
+            android:name=".widget.CounterWidgetConfigureActivity"
+            android:exported="true"
+            android:theme="@style/Theme.ThingCount">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <!-- App Widget Provider for Home Screen Quick Increment and Decrement -->
         <receiver
             android:name=".widget.CounterWidgetProvider"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="com.ranit.thingcount.ACTION_WIDGET_INCREMENT" />
+                <action android:name="com.ranit.thingcount.ACTION_WIDGET_DECREMENT" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"

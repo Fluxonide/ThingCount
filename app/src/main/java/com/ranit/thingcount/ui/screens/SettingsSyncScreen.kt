@@ -1,10 +1,13 @@
 package com.ranit.thingcount.ui.screens
 
 import android.app.Activity
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,14 +36,18 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -60,12 +67,14 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.ranit.thingcount.BuildConfig
 import com.ranit.thingcount.ThingCountApp
 import com.ranit.thingcount.data.drive.SyncResult
+import com.ranit.thingcount.data.model.Counter
 import com.ranit.thingcount.data.update.AppUpdateManager
 import com.ranit.thingcount.ui.viewmodel.CounterViewModel
 import com.ranit.thingcount.widget.CounterWidgetProvider
@@ -91,6 +100,7 @@ fun SettingsSyncScreen(
     val syncResult by viewModel.syncResult.collectAsState()
     val updateInfo by viewModel.updateInfo.collectAsState()
     val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
+    val allCounters by viewModel.counters.collectAsState()
 
     var showImportDialog by remember { mutableStateOf(false) }
     var importJsonText by remember { mutableStateOf("") }
@@ -104,6 +114,13 @@ fun SettingsSyncScreen(
     var widgetIconSize by remember { mutableIntStateOf(WidgetPreferences.getIconSize(context)) }
     var widgetIconShape by remember { mutableStateOf(WidgetPreferences.getIconShape(context)) }
     var widgetShowTitle by remember { mutableStateOf(WidgetPreferences.getShowTitle(context)) }
+
+    val appWidgetManager = remember { AppWidgetManager.getInstance(context) }
+    var activeWidgetIds by remember {
+        mutableStateOf(
+            appWidgetManager.getAppWidgetIds(ComponentName(context, CounterWidgetProvider::class.java))
+        )
+    }
 
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -302,6 +319,105 @@ fun SettingsSyncScreen(
                             },
                             label = { Text("Hide") }
                         )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "Home Screen Widgets (${activeWidgetIds.size} active)",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    if (activeWidgetIds.isEmpty()) {
+                        Text(
+                            text = "No active widgets found on your home screen. When you add a ThingCount widget from your launcher, you can pick which counter it displays.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Text(
+                            text = "Select which counter each widget tracks on your home screen:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        activeWidgetIds.forEachIndexed { index, widgetId ->
+                            var expanded by remember { mutableStateOf(false) }
+                            val currentCounterId = WidgetPreferences.getCounterIdForWidget(context, widgetId)
+                            val currentCounter = allCounters.find { it.id == currentCounterId }
+                                ?: allCounters.minWithOrNull(compareBy<Counter> { it.sortOrder }.thenByDescending { it.updatedAt })
+
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Widget #${index + 1}",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = currentCounter?.title ?: "Select Counter",
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    Box {
+                                        OutlinedButton(
+                                            onClick = { expanded = true },
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Text("Change")
+                                        }
+
+                                        DropdownMenu(
+                                            expanded = expanded,
+                                            onDismissRequest = { expanded = false }
+                                        ) {
+                                            allCounters.forEach { counter ->
+                                                DropdownMenuItem(
+                                                    text = {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            if (counter.emoji.isNotBlank()) {
+                                                                Text(counter.emoji, modifier = Modifier.padding(end = 8.dp))
+                                                            }
+                                                            Text(counter.title)
+                                                        }
+                                                    },
+                                                    onClick = {
+                                                        expanded = false
+                                                        WidgetPreferences.setCounterIdForWidget(context, widgetId, counter.id)
+                                                        CounterWidgetProvider.updateAppWidget(context, appWidgetManager, widgetId)
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

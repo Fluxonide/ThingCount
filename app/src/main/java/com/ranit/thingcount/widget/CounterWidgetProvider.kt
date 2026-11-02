@@ -50,6 +50,13 @@ class CounterWidgetProvider : AppWidgetProvider() {
         }
     }
 
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        super.onDeleted(context, appWidgetIds)
+        for (appWidgetId in appWidgetIds) {
+            WidgetPreferences.removeCounterIdForWidget(context, appWidgetId)
+        }
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         val action = intent.action
@@ -99,9 +106,13 @@ class CounterWidgetProvider : AppWidgetProvider() {
             val views = RemoteViews(context.packageName, R.layout.widget_counter)
             applyAppearance(context, views, appWidgetManager, appWidgetId)
 
-            val openAppIntent = Intent(context, MainActivity::class.java)
+            val openAppIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
             val openAppPendingIntent = PendingIntent.getActivity(
-                context, 0, openAppIntent,
+                context,
+                (appWidgetId shl 2) or 2,
+                openAppIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.widget_root, openAppPendingIntent)
@@ -109,15 +120,24 @@ class CounterWidgetProvider : AppWidgetProvider() {
             CoroutineScope(Dispatchers.IO).launch {
                 updateMutex.withLock {
                     val app = context.applicationContext as? ThingCountApp
-                    val counter = app?.database?.counterDao()
+                    val allCounters = app?.database?.counterDao()
                         ?.getAllCountersRaw()
-                        ?.filter { !it.isDeleted }
-                        ?.minWithOrNull(compareBy<Counter> { it.sortOrder }.thenByDescending { it.updatedAt })
+                        ?.filter { !it.isDeleted } ?: emptyList()
+
+                    val targetCounterId = WidgetPreferences.getCounterIdForWidget(context, appWidgetId)
+                    var counter = allCounters.find { it.id == targetCounterId }
+
+                    if (counter == null && allCounters.isNotEmpty()) {
+                        counter = allCounters.minWithOrNull(compareBy<Counter> { it.sortOrder }.thenByDescending { it.updatedAt })
+                        if (counter != null) {
+                            WidgetPreferences.setCounterIdForWidget(context, appWidgetId, counter.id)
+                        }
+                    }
 
                     if (counter != null) {
                         bindCounter(context, views, counter, appWidgetId)
                     } else {
-                        bindEmptyState(context, views)
+                        bindEmptyState(context, views, appWidgetId)
                     }
 
                     appWidgetManager.updateAppWidget(appWidgetId, views)
@@ -226,13 +246,13 @@ class CounterWidgetProvider : AppWidgetProvider() {
             }
             val incrementPendingIntent = PendingIntent.getBroadcast(
                 context,
-                appWidgetId,
+                (appWidgetId shl 2) or 0,
                 incrementIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             val decrementPendingIntent = PendingIntent.getBroadcast(
                 context,
-                appWidgetId * 2 + 1,
+                (appWidgetId shl 2) or 1,
                 decrementIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
@@ -242,36 +262,43 @@ class CounterWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.widget_count, incrementPendingIntent)
         }
 
-        private fun bindEmptyState(context: Context, views: RemoteViews) {
-            views.setTextViewText(R.id.widget_title, "ThingCount")
+        private fun bindEmptyState(context: Context, views: RemoteViews, appWidgetId: Int) {
+            views.setTextViewText(R.id.widget_title, "Tap to Select")
             views.setTextViewTextSize(
                 R.id.widget_title,
                 TypedValue.COMPLEX_UNIT_SP,
                 TITLE_SIZE_WITH_ICON
             )
-            views.setTextViewText(R.id.widget_count, "0")
+            views.setTextViewText(R.id.widget_count, "+")
 
             val blue = 0xFF3871E0.toInt()
             views.setImageViewBitmap(R.id.widget_btn_increment_bg, circleButtonBitmap(blue))
             views.setImageViewBitmap(R.id.widget_btn_decrement_bg, circleButtonBitmap(blue))
             views.setTextColor(R.id.widget_btn_plus, Color.WHITE)
             views.setTextColor(R.id.widget_btn_minus, Color.WHITE)
-            views.setContentDescription(R.id.widget_btn_increment, "Open ThingCount")
-            views.setContentDescription(R.id.widget_btn_decrement, "Open ThingCount")
+            views.setContentDescription(R.id.widget_btn_increment, "Select counter")
+            views.setContentDescription(R.id.widget_btn_decrement, "Select counter")
 
             views.setViewVisibility(R.id.widget_icon_frame, View.VISIBLE)
             views.setViewVisibility(R.id.widget_icon, View.GONE)
             views.setViewVisibility(R.id.widget_icon_emoji, View.VISIBLE)
             views.setTextViewText(R.id.widget_icon_emoji, "🎯")
 
-            val openAppIntent = Intent(context, MainActivity::class.java)
-            val openAppPendingIntent = PendingIntent.getActivity(
-                context, 0, openAppIntent,
+            val configIntent = Intent(context, CounterWidgetConfigureActivity::class.java).apply {
+                action = AppWidgetManager.ACTION_APPWIDGET_CONFIGURE
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val configPendingIntent = PendingIntent.getActivity(
+                context,
+                (appWidgetId shl 2) or 3,
+                configIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            views.setOnClickPendingIntent(R.id.widget_btn_increment, openAppPendingIntent)
-            views.setOnClickPendingIntent(R.id.widget_btn_decrement, openAppPendingIntent)
-            views.setOnClickPendingIntent(R.id.widget_count, openAppPendingIntent)
+            views.setOnClickPendingIntent(R.id.widget_root, configPendingIntent)
+            views.setOnClickPendingIntent(R.id.widget_btn_increment, configPendingIntent)
+            views.setOnClickPendingIntent(R.id.widget_btn_decrement, configPendingIntent)
+            views.setOnClickPendingIntent(R.id.widget_count, configPendingIntent)
         }
 
         private fun bindIcon(context: Context, views: RemoteViews, icon: String): Boolean {

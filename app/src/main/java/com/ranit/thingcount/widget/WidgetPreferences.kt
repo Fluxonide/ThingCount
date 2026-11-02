@@ -37,6 +37,7 @@ object WidgetPreferences {
     private const val KEY_ICON_SIZE = "icon_size_dp"
     private const val KEY_ICON_SHAPE = "icon_shape"
     private const val KEY_SHOW_TITLE = "show_title"
+    private const val KEY_PREFIX_WIDGET_COUNTER = "widget_counter_"
 
     const val DEFAULT_ICON_SIZE = 36
 
@@ -44,6 +45,21 @@ object WidgetPreferences {
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    fun getCounterIdForWidget(context: Context, appWidgetId: Int): String? =
+        prefs(context).getString("$KEY_PREFIX_WIDGET_COUNTER$appWidgetId", null)
+
+    fun setCounterIdForWidget(context: Context, appWidgetId: Int, counterId: String) {
+        prefs(context).edit()
+            .putString("$KEY_PREFIX_WIDGET_COUNTER$appWidgetId", counterId)
+            .apply()
+    }
+
+    fun removeCounterIdForWidget(context: Context, appWidgetId: Int) {
+        prefs(context).edit()
+            .remove("$KEY_PREFIX_WIDGET_COUNTER$appWidgetId")
+            .apply()
+    }
 
     fun getShape(context: Context): WidgetShape =
         WidgetShape.fromKey(prefs(context).getString(KEY_SHAPE, WidgetShape.ROUNDED.key))
