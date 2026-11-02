@@ -104,10 +104,10 @@ fun CounterCard(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = counter.emoji,
-                        fontSize = 26.sp,
-                        modifier = Modifier.padding(end = 8.dp)
+                    CounterIconView(
+                        icon = counter.emoji,
+                        size = 32.dp,
+                        modifier = Modifier.padding(end = 10.dp)
                     )
 
                     Column(modifier = Modifier.weight(1f)) {

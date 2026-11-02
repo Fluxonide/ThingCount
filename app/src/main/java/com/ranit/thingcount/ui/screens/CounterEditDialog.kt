@@ -1,5 +1,8 @@
 package com.ranit.thingcount.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,23 +16,31 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,13 +49,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ranit.thingcount.data.model.Counter
 import com.ranit.thingcount.data.model.ResetPeriod
+import com.ranit.thingcount.ui.components.CounterIconView
 import com.ranit.thingcount.ui.theme.CounterColors
+import java.io.File
+import java.io.FileOutputStream
 
 private val PRESET_EMOJIS = listOf("🎯", "💧", "📖", "🏋️", "☕", "💰", "💊", "🚶", "⭐️", "🔥", "🧘", "🍏")
 
@@ -55,6 +70,8 @@ fun CounterEditDialog(
     onDismiss: () -> Unit,
     onSave: (Counter) -> Unit
 ) {
+    val context = LocalContext.current
+
     var title by remember { mutableStateOf(counter?.title ?: "") }
     var emoji by remember { mutableStateOf(counter?.emoji ?: "🎯") }
     var tag by remember { mutableStateOf(counter?.tag ?: "General") }
@@ -63,7 +80,28 @@ fun CounterEditDialog(
     var selectedColor by remember { mutableLongStateOf(counter?.colorHex ?: CounterColors.first()) }
     var resetPeriod by remember { mutableStateOf(counter?.autoResetPeriod ?: ResetPeriod.NONE) }
 
+    var iconMode by remember { mutableIntStateOf(0) } // 0: Emoji, 1: Direct Link, 2: Upload
+    var customUrlText by remember {
+        mutableStateOf(if (emoji.startsWith("http://") || emoji.startsWith("https://")) emoji else "")
+    }
+
     var resetDropdownExpanded by remember { mutableStateOf(false) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val iconFile = File(context.filesDir, "custom_icon_${System.currentTimeMillis()}.png")
+                val outputStream = FileOutputStream(iconFile)
+                inputStream?.copyTo(outputStream)
+                inputStream?.close()
+                outputStream.close()
+                emoji = iconFile.absolutePath
+            } catch (_: Exception) {}
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -89,32 +127,98 @@ fun CounterEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Emoji Picker
-                Text("Icon / Emoji", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                // Icon / Emoji Selector with Live Preview
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    PRESET_EMOJIS.forEach { item ->
-                        Box(
+                    CounterIconView(icon = emoji, size = 44.dp)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("Counter Icon", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text("Choose an emoji, paste link, or upload an image", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+
+                // Icon Source Mode Chips
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = iconMode == 0,
+                        onClick = { iconMode = 0 },
+                        label = { Text("Emoji") }
+                    )
+                    FilterChip(
+                        selected = iconMode == 1,
+                        onClick = { iconMode = 1 },
+                        label = { Text("Link") }
+                    )
+                    FilterChip(
+                        selected = iconMode == 2,
+                        onClick = {
+                            iconMode = 2
+                            imagePickerLauncher.launch("image/*")
+                        },
+                        label = { Text("Upload") }
+                    )
+                }
+
+                when (iconMode) {
+                    0 -> {
+                        // Preset Emojis
+                        Row(
                             modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (emoji == item) MaterialTheme.colorScheme.primaryContainer
-                                    else Color.Transparent
-                                )
-                                .border(
-                                    width = if (emoji == item) 2.dp else 1.dp,
-                                    color = if (emoji == item) MaterialTheme.colorScheme.primary else Color.LightGray,
-                                    shape = CircleShape
-                                )
-                                .clickable { emoji = item },
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(item, fontSize = 20.sp)
+                            PRESET_EMOJIS.forEach { item ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (emoji == item) MaterialTheme.colorScheme.primaryContainer
+                                            else Color.Transparent
+                                        )
+                                        .border(
+                                            width = if (emoji == item) 2.dp else 1.dp,
+                                            color = if (emoji == item) MaterialTheme.colorScheme.primary else Color.LightGray,
+                                            shape = CircleShape
+                                        )
+                                        .clickable { emoji = item },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(item, fontSize = 20.sp)
+                                }
+                            }
+                        }
+                    }
+                    1 -> {
+                        // Direct Image URL
+                        OutlinedTextField(
+                            value = customUrlText,
+                            onValueChange = {
+                                customUrlText = it
+                                if (it.isNotBlank()) emoji = it.trim()
+                            },
+                            label = { Text("Image Direct URL (https://...)") },
+                            leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    2 -> {
+                        // Upload / Pick Image
+                        OutlinedButton(
+                            onClick = { imagePickerLauncher.launch("image/*") },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Choose Image from Gallery")
                         }
                     }
                 }
@@ -229,9 +333,11 @@ fun CounterEditDialog(
                     val startVal = startValueText.toLongOrNull() ?: 0L
                     val stepVal = stepText.toLongOrNull()?.coerceAtLeast(1L) ?: 1L
 
+                    val finalIcon = if (iconMode == 1 && customUrlText.isNotBlank()) customUrlText.trim() else emoji
+
                     val updated = counter?.copy(
                         title = title.ifBlank { "Counter" },
-                        emoji = emoji,
+                        emoji = finalIcon.ifBlank { "🎯" },
                         tag = tag.ifBlank { "General" },
                         startValue = startVal,
                         step = stepVal,
@@ -239,7 +345,7 @@ fun CounterEditDialog(
                         autoResetPeriod = resetPeriod
                     ) ?: Counter(
                         title = title.ifBlank { "Counter" },
-                        emoji = emoji,
+                        emoji = finalIcon.ifBlank { "🎯" },
                         tag = tag.ifBlank { "General" },
                         currentValue = startVal,
                         startValue = startVal,

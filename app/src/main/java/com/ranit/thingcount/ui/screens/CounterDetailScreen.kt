@@ -139,7 +139,10 @@ fun CounterDetailScreen(
                         .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(text = currentCounter.emoji, fontSize = 48.sp)
+                    com.ranit.thingcount.ui.components.CounterIconView(
+                        icon = currentCounter.emoji,
+                        size = 64.dp
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = currentCounter.currentValue.toString(),
