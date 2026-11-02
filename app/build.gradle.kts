@@ -20,6 +20,9 @@ android {
             useSupportLibrary = true
         }
 
+        // Only package English strings from libraries to remove 80+ unused locale files
+        resourceConfigurations += listOf("en")
+
         buildConfigField("String", "GITHUB_REPO_OWNER", "\"${System.getenv("GITHUB_REPO_OWNER") ?: ""}\"")
         buildConfigField("String", "GITHUB_REPO_NAME", "\"${System.getenv("GITHUB_REPO_NAME") ?: "ThingCount"}\"")
     }
@@ -39,7 +42,9 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Enable R8 code minification & unused resource shrinking for a ultra-light APK
+            isMinifyEnabled = true
+            isShrinkResources = true
             val releaseSigning = signingConfigs.getByName("release")
             if (releaseSigning.storeFile?.exists() == true) {
                 signingConfig = releaseSigning
