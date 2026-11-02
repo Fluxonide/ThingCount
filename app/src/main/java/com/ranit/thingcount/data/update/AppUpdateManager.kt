@@ -1,22 +1,21 @@
 package com.ranit.thingcount.data.update
 
-import android.app.DownloadManager
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.provider.Settings
+import android.widget.Toast
 import androidx.core.content.FileProvider
-import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.ranit.thingcount.BuildConfig
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.File
+import java.io.FileOutputStream
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
@@ -43,8 +42,8 @@ object AppUpdateManager {
             val connection = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 setRequestProperty("Accept", "application/vnd.github+json")
-                connectTimeout = 8000
-                readTimeout = 8000
+                connectTimeout = 10000
+                readTimeout = 10000
             }
 
             if (connection.responseCode == 200) {
@@ -77,7 +76,7 @@ object AppUpdateManager {
                 val isNewer = isVersionNewer(cleanLatest, cleanCurrent)
 
                 UpdateInfo(
-                    hasUpdate = isNewer && downloadUrl.isNotBlank(),
+                    hasUpdate = (isNewer || cleanLatest != cleanCurrent) && downloadUrl.isNotBlank(),
                     currentVersion = currentVersion,
                     latestVersion = tagName,
                     releaseNotes = releaseNotes,
@@ -103,7 +102,7 @@ object AppUpdateManager {
     }
 
     private fun isVersionNewer(remote: String, local: String): Boolean {
-        if (remote == local) return false
+        if (remote.isBlank() || remote == local) return false
         val remoteParts = remote.split(".").mapNotNull { it.toIntOrNull() }
         val localParts = local.split(".").mapNotNull { it.toIntOrNull() }
 
@@ -114,7 +113,7 @@ object AppUpdateManager {
             if (r > l) return true
             if (r < l) return false
         }
-        return false
+        return remote != local
     }
 
     fun startDownloadAndInstall(
@@ -122,53 +121,67 @@ object AppUpdateManager {
         downloadUrl: String,
         apkFileName: String
     ) {
-        val destinationFile = File(
-            context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-            apkFileName
-        )
+        Toast.makeText(context, "Downloading update...", Toast.LENGTH_SHORT).show()
 
-        if (destinationFile.exists()) {
-            destinationFile.delete()
-        }
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // Follow redirects (GitHub Releases redirect to AWS S3)
+                var currentUrl = downloadUrl
+                var connection: HttpURLConnection
+                var redirects = 0
 
-        val request = DownloadManager.Request(Uri.parse(downloadUrl)).apply {
-            setTitle("Downloading ThingCount update...")
-            setDescription(apkFileName)
-            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            setDestinationUri(Uri.fromFile(destinationFile))
-            setMimeType("application/vnd.android.package-archive")
-        }
+                while (true) {
+                    val url = URL(currentUrl)
+                    connection = (url.openConnection() as HttpURLConnection).apply {
+                        instanceFollowRedirects = true
+                        connectTimeout = 15000
+                        readTimeout = 30000
+                    }
+                    val status = connection.responseCode
+                    if (status == HttpURLConnection.HTTP_MOVED_TEMP ||
+                        status == HttpURLConnection.HTTP_MOVED_PERM ||
+                        status == 307 || status == 308
+                    ) {
+                        currentUrl = connection.getHeaderField("Location")
+                        redirects++
+                        if (redirects > 5) break
+                        continue
+                    }
+                    break
+                }
 
-        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        val downloadId = downloadManager.enqueue(request)
+                val destinationFile = File(context.cacheDir, apkFileName.ifBlank { "update.apk" })
+                if (destinationFile.exists()) {
+                    destinationFile.delete()
+                }
 
-        val onComplete = object : BroadcastReceiver() {
-            override fun onReceive(recvContext: Context, intent: Intent) {
-                val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
-                if (id == downloadId) {
-                    try {
-                        context.unregisterReceiver(this)
-                    } catch (_: Exception) {}
+                connection.inputStream.use { input ->
+                    FileOutputStream(destinationFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
 
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Download complete. Opening installer...", Toast.LENGTH_SHORT).show()
                     installApk(context, destinationFile)
                 }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Download failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                }
             }
-        }
-
-        val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(onComplete, filter, Context.RECEIVER_EXPORTED)
-        } else {
-            context.registerReceiver(onComplete, filter)
         }
     }
 
     fun installApk(context: Context, apkFile: File) {
-        if (!apkFile.exists()) return
+        if (!apkFile.exists() || apkFile.length() == 0L) {
+            Toast.makeText(context, "Downloaded APK is invalid or empty", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-        // On Android 8.0+ check canRequestPackageInstalls
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (!context.packageManager.canRequestPackageInstalls()) {
+                Toast.makeText(context, "Please allow ThingCount to install updates", Toast.LENGTH_LONG).show()
                 val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
                     data = Uri.parse("package:${context.packageName}")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

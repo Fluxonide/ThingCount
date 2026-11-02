@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag (e.g. v1.0.0)'
+        description: 'Release tag (e.g. v0.0.4)'
         required: false
-        default: 'v1.0.0'
+        default: 'v0.0.4'
 
 permissions:
   contents: write
@@ -45,6 +45,18 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
+      - name: Calculate Version Info
+        id: version_info
+        run: |
+          RAW_TAG="${{ github.ref_name }}"
+          if [ -z "$RAW_TAG" ] || [ "$RAW_TAG" = "main" ]; then
+            RAW_TAG="${{ inputs.tag_name || 'v0.0.4' }}"
+          fi
+          CLEAN_VERSION="${RAW_TAG#v}"
+          echo "tag=$RAW_TAG" >> $GITHUB_OUTPUT
+          echo "version_name=$CLEAN_VERSION" >> $GITHUB_OUTPUT
+          echo "version_code=$(( 100 + ${{ github.run_number }} ))" >> $GITHUB_OUTPUT
+
       - name: Build Release APK
         env:
           KEYSTORE_PATH: release.keystore
@@ -53,17 +65,15 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           GITHUB_REPO_OWNER: ${{ github.repository_owner }}
           GITHUB_REPO_NAME: ${{ github.event.repository.name }}
+          APP_VERSION_NAME: ${{ steps.version_info.outputs.version_name }}
+          APP_VERSION_CODE: ${{ steps.version_info.outputs.version_code }}
         run: |
           ./gradlew assembleRelease --stacktrace
 
       - name: Prepare Release Artifact
         id: prepare_release
         run: |
-          TAG="${{ github.ref_name }}"
-          if [ -z "$TAG" ] || [ "$TAG" = "main" ]; then
-            TAG="${{ inputs.tag_name || 'v1.0.0' }}"
-          fi
-
+          TAG="${{ steps.version_info.outputs.tag }}"
           APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
           RELEASE_NAME="ThingCount-${TAG}.apk"
           cp "$APK_PATH" "$RELEASE_NAME"

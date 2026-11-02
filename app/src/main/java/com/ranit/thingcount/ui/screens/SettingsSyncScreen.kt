@@ -370,9 +370,13 @@ fun SettingsSyncScreen(
                     val update = updateInfo
                     if (update != null) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        if (update.hasUpdate) {
+                        val cleanRemote = update.latestVersion.removePrefix("v").trim()
+                        val cleanLocal = update.currentVersion.removePrefix("v").trim()
+                        val isDifferent = cleanRemote != cleanLocal && update.downloadUrl.isNotBlank()
+
+                        if (update.hasUpdate || isDifferent) {
                             Text(
-                                text = "🎉 Update available: ${update.latestVersion}!",
+                                text = "🎉 Update available: ${update.latestVersion}! (Installed: v${update.currentVersion})",
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp
