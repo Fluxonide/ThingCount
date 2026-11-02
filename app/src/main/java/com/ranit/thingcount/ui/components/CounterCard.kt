@@ -82,7 +82,7 @@ fun CounterCard(
             .clickable { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
         )
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
