@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface CounterDao {
 
-    @Query("SELECT * FROM counters WHERE isDeleted = 0 ORDER BY sortOrder ASC, updatedAt DESC")
+    @Query("SELECT * FROM counters WHERE isDeleted = 0 ORDER BY sortOrder ASC, rowid ASC")
     fun getAllActiveCounters(): Flow<List<Counter>>
 
     @Query("SELECT * FROM counters")
