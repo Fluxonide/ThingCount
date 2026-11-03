@@ -1,10 +1,8 @@
 package com.ranit.thingcount.data.local
 
 import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Update
+import androidx.room.Upsert
 import com.ranit.thingcount.data.model.Counter
 import kotlinx.coroutines.flow.Flow
 
@@ -23,10 +21,10 @@ interface CounterDao {
     @Query("SELECT * FROM counters WHERE id = :id LIMIT 1")
     suspend fun getCounterByIdSync(id: String): Counter?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun upsert(counter: Counter)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun upsertAll(counters: List<Counter>)
 
     @Query("UPDATE counters SET isDeleted = 1, updatedAt = :updatedAt WHERE id = :id")
